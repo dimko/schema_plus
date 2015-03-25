@@ -67,7 +67,6 @@ module SchemaPlus::ActiveRecord::ConnectionAdapters
     include SchemaPlus::ActiveRecord::ColumnOptionsHandler
 
     attr_accessor :schema_plus_config #:nodoc:
-    attr_reader :foreign_keys #:nodoc:
 
     def self.included(base) #:nodoc:
       base.class_eval do
@@ -76,6 +75,10 @@ module SchemaPlus::ActiveRecord::ConnectionAdapters
         alias_method_chain :references, :schema_plus
         alias_method_chain :belongs_to, :schema_plus
         alias_method_chain :primary_key, :schema_plus
+
+        if "#{::ActiveRecord::VERSION::MAJOR}.#{::ActiveRecord::VERSION::MINOR}".to_r < "4.2".to_r
+          attr_reader :foreign_keys
+        end
 
         if ::ActiveRecord::VERSION::MAJOR.to_i < 4
           attr_accessor :name
@@ -87,7 +90,9 @@ module SchemaPlus::ActiveRecord::ConnectionAdapters
 
     def initialize_with_schema_plus(*args) #:nodoc:
       initialize_without_schema_plus(*args)
-      @foreign_keys = []
+      if "#{::ActiveRecord::VERSION::MAJOR}.#{::ActiveRecord::VERSION::MINOR}".to_r < "4.2".to_r
+        @foreign_keys = []
+      end
       if ::ActiveRecord::VERSION::MAJOR.to_i < 4
         @indexes = []
       end
@@ -138,10 +143,12 @@ module SchemaPlus::ActiveRecord::ConnectionAdapters
       self
     end
 
-    def to_sql_with_schema_plus #:nodoc:
-      sql = to_sql_without_schema_plus
-      sql << ', ' << @foreign_keys.map(&:to_sql) * ', ' unless @foreign_keys.empty?
-      sql
+    if ::ActiveRecord::VERSION::MAJOR.to_i < 4
+      def to_sql_with_schema_plus #:nodoc:
+        sql = to_sql_without_schema_plus
+        sql << ', ' << @foreign_keys.map(&:to_sql) * ', ' unless @foreign_keys.empty?
+        sql
+      end
     end
 
     # Define an index for the current
@@ -151,11 +158,13 @@ module SchemaPlus::ActiveRecord::ConnectionAdapters
       end
     end
 
-    def foreign_key(column_names, references_table_name, references_column_names, options = {})
-      options.merge!(:column_names => column_names, :references_column_names => references_column_names)
-      options.reverse_merge!(:name => ForeignKeyDefinition.default_name(self.name, column_names))
-      @foreign_keys << ForeignKeyDefinition.new(self.name, AbstractAdapter.proper_table_name(references_table_name), options)
-      self
+    if "#{::ActiveRecord::VERSION::MAJOR}.#{::ActiveRecord::VERSION::MINOR}".to_r < "4.2".to_r
+      def foreign_key(column_names, references_table_name, references_column_names, options = {})
+        options.merge!(:column_names => column_names, :references_column_names => references_column_names)
+        options.reverse_merge!(:name => ForeignKeyDefinition.default_name(self.name, column_names))
+        @foreign_keys << ForeignKeyDefinition.new(self.name, AbstractAdapter.proper_table_name(references_table_name), options)
+        self
+      end
     end
 
     protected
